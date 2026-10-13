@@ -423,6 +423,37 @@ def test_smape_smallest_difference(dtype):
     assert actual > 0
 
 
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "device",
+    ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"))],
+)
+def test_smape_epsilon_floor(dtype, device):
+    """Small inputs must retain their dtype and use the epsilon floor."""
+    preds = torch.tensor([1.17e-6 / 4], dtype=dtype, device=device)
+    target = torch.zeros_like(preds)
+    expected = torch.tensor(0.5, dtype=dtype, device=device)
+    torch.testing.assert_close(symmetric_mean_absolute_percentage_error(preds, target), expected, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "device",
+    ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"))],
+)
+def test_smape_opposite_sign_gradients(dtype, device):
+    """SMAPE is constant at two for nonzero, opposite-sign inputs above the epsilon floor."""
+    largest = torch.finfo(dtype).max
+    # Check the asymmetric float16 pair separately so averaging cannot round away a spurious gradient.
+    for pred_value, target_value in [(largest, -largest / 2), (-50624, 42944)]:
+        preds = torch.tensor([pred_value], dtype=dtype, device=device, requires_grad=True)
+        target = torch.tensor([target_value], dtype=dtype, device=device, requires_grad=True)
+        result = symmetric_mean_absolute_percentage_error(preds, target)
+        torch.testing.assert_close(result, torch.tensor(2.0, dtype=dtype, device=device))
+        for grad in torch.autograd.grad(result, (preds, target)):
+            torch.testing.assert_close(grad, torch.zeros_like(grad), atol=0, rtol=0)
+
+
 @pytest.mark.parametrize(
     "device",
     ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"))],

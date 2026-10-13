@@ -40,9 +40,7 @@ def _symmetric_mean_absolute_percentage_error_update(
     abs_target = torch.abs(target)
     # Halve overflowing pairs before subtracting or adding their magnitudes.
     # Leave small pairs unchanged so their subnormal differences are preserved.
-    scale = torch.where(
-        torch.isinf(abs_preds + abs_target), torch.full_like(abs_preds, 0.5), torch.ones_like(abs_preds)
-    )
+    scale = torch.ones_like(abs_preds).masked_fill_(torch.isposinf(abs_preds + abs_target), 0.5)
     preds, target = preds * scale, target * scale
     abs_diff = torch.abs(preds - target)
     abs_per_error = abs_diff / torch.maximum(torch.abs(target) + torch.abs(preds), epsilon * scale)
